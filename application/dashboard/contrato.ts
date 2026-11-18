@@ -29,8 +29,8 @@ export interface Telemetria {
   histerese: number
   /** L/min */
   vazao: number
-  /** litros transferidos desde a inicialização do ESP32 */
-  volumeTransferido: number
+  /** litros transferidos desde a inicialização do ESP32; null quando o firmware não envia */
+  volumeTransferido: number | null
   valvulaAberta: boolean
   estadoSistema: EstadoSistema
   /** código do alerta ativo (ver ALERTAS); "" quando não há alerta */
@@ -100,7 +100,7 @@ export const ALERTAS: Record<string, DescricaoAlerta> = {
   SENSOR_TEMP_DESCONECTADO: {
     nivel: 'falha',
     titulo: 'Sensor de temperatura desconectado',
-    mensagem: 'O DS18B20 não responde (leitura -127 °C). Verifique os fios e o resistor de 4,7 kΩ.',
+    mensagem: 'O DS18B20 não responde (leitura -127 °C). Verifique os fios e o resistor de pull-up de 5 kΩ.',
   },
   LEITURA_TEMP_INVALIDA: {
     nivel: 'falha',
@@ -173,8 +173,12 @@ export function parseTelemetria(dados: unknown): Telemetria | null {
   const { temperaturaAtual, temperaturaAlvo, histerese, vazao, volumeTransferido, valvulaAberta, estadoSistema, alerta } =
     dados as Record<string, unknown>
 
-  if (!ehNumero(temperaturaAlvo) || !ehNumero(histerese) || !ehNumero(vazao) || !ehNumero(volumeTransferido)) return null
-  if (histerese < 0 || vazao < 0 || volumeTransferido < 0) return null
+  if (!ehNumero(temperaturaAlvo) || !ehNumero(histerese) || !ehNumero(vazao)) return null
+  if (histerese < 0 || vazao < 0) return null
+
+  // o volume é opcional: o firmware da camada de percepção ainda não calcula
+  const volume = volumeTransferido ?? null
+  if (volume !== null && (!ehNumero(volume) || volume < 0)) return null
   if (!ehNumero(estadoSistema) || !ESTADOS_VALIDOS.has(estadoSistema)) return null
 
   // aceita 0/1 além de true/false para facilitar o lado do firmware
@@ -191,7 +195,7 @@ export function parseTelemetria(dados: unknown): Telemetria | null {
     temperaturaAlvo,
     histerese,
     vazao,
-    volumeTransferido,
+    volumeTransferido: volume,
     valvulaAberta: valvula,
     estadoSistema: estadoSistema as EstadoSistema,
     alerta: codigoAlerta,

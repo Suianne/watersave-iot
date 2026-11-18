@@ -32,6 +32,12 @@ describe('parseTelemetria (estrutura dos dados recebidos do ESP32)', () => {
     expect(parseTelemetria({ ...pacoteValido, valvulaAberta: 0 })?.valvulaAberta).toBe(false)
   })
 
+  it('aceita pacote sem volumeTransferido (o firmware ainda não calcula o volume)', () => {
+    const { volumeTransferido: _volume, ...semVolume } = pacoteValido
+    expect(parseTelemetria(semVolume)?.volumeTransferido).toBeNull()
+    expect(parseTelemetria({ ...pacoteValido, volumeTransferido: null })?.volumeTransferido).toBeNull()
+  })
+
   it('usa "" quando o campo alerta não vem', () => {
     const { alerta: _alerta, ...semAlerta } = pacoteValido
     expect(parseTelemetria(semAlerta)?.alerta).toBe('')
@@ -43,6 +49,8 @@ describe('parseTelemetria (estrutura dos dados recebidos do ESP32)', () => {
     ['sem temperaturaAlvo', { ...pacoteValido, temperaturaAlvo: undefined }],
     ['vazão como texto', { ...pacoteValido, vazao: '4.8' }],
     ['vazão negativa', { ...pacoteValido, vazao: -1 }],
+    ['volume como texto', { ...pacoteValido, volumeTransferido: '1.2' }],
+    ['volume negativo', { ...pacoteValido, volumeTransferido: -1 }],
     ['estado desconhecido', { ...pacoteValido, estadoSistema: 9 }],
     ['válvula com valor estranho', { ...pacoteValido, valvulaAberta: 'sim' }],
     ['alerta numérico', { ...pacoteValido, alerta: 3 }],

@@ -9,6 +9,8 @@ interface Props {
 
 export function CartaoVazao({ telemetria, atualizado }: Props) {
   const escoando = (telemetria?.vazao ?? 0) > 0
+  const volume = telemetria?.volumeTransferido ?? null
+  const semVolume = telemetria !== null && volume === null
   return (
     <Cartao titulo="Vazão" destaque={escoando ? 'info' : 'neutro'}>
       <p className={`valor ${atualizado ? '' : 'valor--desatualizado'}`} data-testid="vazao">
@@ -17,9 +19,13 @@ export function CartaoVazao({ telemetria, atualizado }: Props) {
       </p>
       <p className="nota">
         Volume transferido:{' '}
-        <strong data-testid="volume">{telemetria ? `${formatarNumero(telemetria.volumeTransferido, 2)} L` : '--'}</strong>
+        <strong data-testid="volume">{volume !== null ? `${formatarNumero(volume, 2)} L` : '--'}</strong>
       </p>
-      <p className="nota nota--suave">Medido pelo YF-S201, contado desde a última inicialização do ESP32</p>
+      <p className="nota nota--suave">
+        {semVolume
+          ? 'O ESP32 não está enviando o volume transferido'
+          : 'Medido pelo YF-S201, contado desde a última inicialização do ESP32'}
+      </p>
     </Cartao>
   )
 }

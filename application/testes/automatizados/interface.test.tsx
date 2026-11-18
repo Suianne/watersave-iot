@@ -49,6 +49,13 @@ describe('indicadores', () => {
     expect(screen.getByText('Leitura inválida do DS18B20')).toBeTruthy()
   })
 
+  it('mostram "--" no volume quando o ESP32 não envia esse dado, sem esconder a vazão', () => {
+    render(<CartaoVazao telemetria={telemetria({ volumeTransferido: null })} atualizado />)
+    expect(screen.getByTestId('vazao').textContent).toBe('4,8 L/min')
+    expect(screen.getByTestId('volume').textContent).toBe('--')
+    expect(screen.getByText('O ESP32 não está enviando o volume transferido')).toBeTruthy()
+  })
+
   it('mostram "--" antes de chegar a primeira telemetria', () => {
     render(<CartaoValvula telemetria={null} />)
     expect(screen.getByTestId('estado-valvula').textContent).toBe('--')

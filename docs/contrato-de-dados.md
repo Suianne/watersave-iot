@@ -60,7 +60,7 @@ Prefixo padrão: `watersave` (configurável no dashboard).
 | `temperaturaAlvo` | float | °C | Alvo em uso pelo firmware (o dashboard confirma a alteração por este campo) |
 | `histerese` | float | °C | Largura da faixa de histerese |
 | `vazao` | float | L/min | Vazão calculada a partir dos pulsos do YF-S201 |
-| `volumeTransferido` | float | L | Volume acumulado desde a inicialização do ESP32 |
+| `volumeTransferido` | float | L | Volume acumulado desde a inicialização do ESP32. **Opcional:** se o firmware não enviar, o dashboard mostra `--` no volume e usa o resto do pacote |
 | `valvulaAberta` | bool | | `true`/`false` (também aceita `1`/`0`) |
 | `estadoSistema` | int | | Código da máquina de estados (tabela abaixo) |
 | `alerta` | string | | Código do alerta ativo; `""` quando não há alerta |
