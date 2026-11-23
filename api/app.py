@@ -5,6 +5,7 @@ from flask_cors import CORS
 from database import (
     inicializar_banco,
     salvar_leitura,
+    obter_ultima_leitura,
     obter_comandos,
     salvar_comando,
     marcar_comando_processado
@@ -104,6 +105,16 @@ def receber_leituras():
 
 
 # ESP32 consulta comandos pendentes
+@app.route("/api/leituras/ultima", methods=["GET"])
+def consultar_ultima_leitura():
+    try:
+        leitura = obter_ultima_leitura()
+        return jsonify({"leitura": leitura}), 200
+    except Exception:
+        app.logger.exception("Erro ao consultar ultima leitura")
+        return jsonify({"erro": "Falha ao consultar ultima leitura"}), 500
+
+
 @app.route("/api/comandos", methods=["GET"])
 def consultar_comandos():
     try:
@@ -138,7 +149,7 @@ def enviar_comando():
             "erro": "comando deve ser um número inteiro"
         }), 400
 
-    if comando not in [1, 2, 3, 4, 5, 6]:
+    if comando not in [1, 2, 3, 4, 5, 6, 7]:
         return jsonify({
             "erro": "Código de comando inválido"
         }), 400
@@ -151,6 +162,12 @@ def enviar_comando():
             return jsonify({
                 "erro": "temperaturaAlvo inválida"
             }), 400
+
+    # Codigo 7 e reservado para atualizar somente a temperatura-alvo.
+    if comando == 7 and temperatura_alvo is None:
+        return jsonify({
+            "erro": "temperaturaAlvo obrigatoria para o comando 7"
+        }), 400
 
     try:
         comando_id = salvar_comando(temperatura_alvo, comando)
