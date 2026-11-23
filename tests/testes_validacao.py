@@ -79,7 +79,19 @@ assert status == 400, f"Esperado 400, recebido {status}"
 print("OK: comando inválido rejeitado.")
 
 
-print("\n--- TESTE 4: VERIFICAR PERSISTENCIA ---")
+print("\n--- TESTE 4: ACEITAR ATUALIZACAO DO ALVO ---")
+
+status, resposta = requisicao(
+    "POST",
+    "/api/comandos",
+    {"comando": 7, "temperaturaAlvo": 38.5}
+)
+
+assert status == 201, f"Esperado 201 para ajuste de alvo, recebido {status}"
+print("OK: comando de atualizacao do alvo cadastrado.")
+
+
+print("\n--- TESTE 5: VERIFICAR PERSISTENCIA ---")
 
 status, resposta = requisicao(
     "POST", "/api/leituras", leitura
