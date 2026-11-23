@@ -272,6 +272,7 @@ export class DispositivoSimulado {
 
 /** Faz o papel do ESP32 + rede: publica a telemetria como o firmware faria. */
 export class TransporteSimulado implements Transporte {
+  readonly tempoConfirmacaoMs = 6000
   readonly dispositivo: DispositivoSimulado
   private eventos: EventosTransporte | null = null
   private relogio: ReturnType<typeof setInterval> | null = null
@@ -299,20 +300,24 @@ export class TransporteSimulado implements Transporte {
     this.eventos = null
   }
 
-  enviarComando(comando: Comando): void {
-    if (!this.online) return
-    setTimeout(() => {
-      this.dispositivo.comando(comando)
-      this.publicar()
-    }, LATENCIA_COMANDO_MS)
+  enviarComando(comando: Comando): Promise<void> {
+    return this.entregar(() => this.dispositivo.comando(comando))
   }
 
-  enviarTemperaturaAlvo(valor: number): void {
-    if (!this.online) return
-    setTimeout(() => {
-      this.dispositivo.definirTemperaturaAlvo(valor)
-      this.publicar()
-    }, LATENCIA_COMANDO_MS)
+  enviarTemperaturaAlvo(valor: number): Promise<void> {
+    return this.entregar(() => this.dispositivo.definirTemperaturaAlvo(valor))
+  }
+
+  /** Aplica no dispositivo depois da latência da rede. Sem Wi-Fi o comando não chega, como no ESP32 real. */
+  private entregar(aplicar: () => void): Promise<void> {
+    if (!this.online) return Promise.reject(new Error('O ESP32 simulado está sem Wi-Fi: o comando não chegou.'))
+    return new Promise((resolver) => {
+      setTimeout(() => {
+        aplicar()
+        this.publicar()
+        resolver()
+      }, LATENCIA_COMANDO_MS)
+    })
   }
 
   /** O ESP32 continua controlando a válvula localmente; só para de publicar. */

@@ -20,7 +20,7 @@ export function PainelSimulacao({ simulador }: { simulador: TransporteSimulado }
   return (
     <Cartao titulo="Simulação do hardware" destaque="aviso" className="painel-simulacao">
       <p className="nota nota--suave">
-        Faz o papel do ESP32 e dos reservatórios enquanto o hardware não está pronto. No modo MQTT este painel some.
+        Faz o papel do ESP32 e dos reservatórios enquanto o hardware não está pronto. No modo API este painel some.
       </p>
 
       <h3 className="subtitulo">Reservatório 1</h3>

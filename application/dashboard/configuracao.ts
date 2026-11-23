@@ -1,27 +1,24 @@
 import { gravarJson, lerJson } from './armazenamento'
 
-export interface ConfigMqtt {
-  /** endereço WebSocket do broker, ex.: wss://xxxx.s1.eu.hivemq.cloud:8884/mqtt */
+export interface ConfigApi {
+  /** endereço da API Flask (api/app.py), ex.: http://192.168.0.10:5000 */
   url: string
-  usuario: string
-  senha: string
-  /** prefixo dos tópicos, ex.: "watersave" gera "watersave/estado" */
-  prefixo: string
 }
 
-export type TipoFonte = 'simulacao' | 'mqtt'
+export type TipoFonte = 'simulacao' | 'api'
 
 export interface Configuracao {
   fonte: TipoFonte
-  mqtt: ConfigMqtt
+  api: ConfigApi
 }
 
-// broker público da HiveMQ: serve para testes, mas qualquer pessoa pode ler e publicar nele
-export const MQTT_PADRAO: ConfigMqtt = {
-  url: 'wss://broker.hivemq.com:8884/mqtt',
-  usuario: '',
-  senha: '',
-  prefixo: 'watersave',
+/**
+ * A API roda na porta 5000 do mesmo computador que serve o dashboard (npm run dev).
+ * Aberto no celular pelo IP da rede, o endereço da página já aponta para esse computador.
+ */
+export function urlApiPadrao(): string {
+  const host = typeof location !== 'undefined' && location.hostname ? location.hostname : 'localhost'
+  return `http://${host}:5000`
 }
 
 const CHAVE = 'watersave:configuracao'
@@ -29,8 +26,9 @@ const CHAVE = 'watersave:configuracao'
 export function carregarConfiguracao(): Configuracao {
   const salva = lerJson<Partial<Configuracao>>(CHAVE, {})
   return {
-    fonte: salva.fonte === 'mqtt' ? 'mqtt' : 'simulacao',
-    mqtt: { ...MQTT_PADRAO, ...salva.mqtt },
+    // configurações antigas com fonte "mqtt" voltam para a simulação
+    fonte: salva.fonte === 'api' ? 'api' : 'simulacao',
+    api: { url: salva.api?.url || urlApiPadrao() },
   }
 }
 

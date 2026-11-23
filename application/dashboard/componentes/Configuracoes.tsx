@@ -1,6 +1,5 @@
-import { useState, type ComponentProps } from 'react'
-import { topicos } from '../contrato'
-import type { ConfigMqtt, Configuracao, TipoFonte } from '../configuracao'
+import { useState } from 'react'
+import { urlApiPadrao, type Configuracao, type TipoFonte } from '../configuracao'
 import { Dialogo } from './Dialogo'
 
 interface Props {
@@ -12,26 +11,12 @@ interface Props {
 
 export function Configuracoes({ configuracao, aoSalvar, aoLimparHistorico, aoFechar }: Props) {
   const [fonte, setFonte] = useState<TipoFonte>(configuracao.fonte)
-  const [mqtt, setMqtt] = useState<ConfigMqtt>(configuracao.mqtt)
-  const urlValida = /^wss?:\/\/.+/.test(mqtt.url.trim())
-  const prefixo = mqtt.prefixo.trim().replace(/\/+$/, '')
-  const podeSalvar = fonte === 'simulacao' || (urlValida && prefixo !== '')
-
-  const campo = (chave: keyof ConfigMqtt, rotulo: string, extra: ComponentProps<'input'> = {}) => (
-    <label className="campo">
-      <span className="campo__rotulo">{rotulo}</span>
-      <input
-        className="campo__entrada"
-        value={mqtt[chave]}
-        onChange={(evento) => setMqtt({ ...mqtt, [chave]: evento.target.value })}
-        autoComplete="off"
-        spellCheck={false}
-        {...extra}
-      />
-    </label>
-  )
-
-  const t = topicos(prefixo || 'prefixo')
+  const [url, setUrl] = useState(configuracao.api.url)
+  const urlLimpa = url.trim().replace(/\/+$/, '')
+  const urlValida = /^https?:\/\/.+/.test(urlLimpa)
+  const podeSalvar = fonte === 'simulacao' || urlValida
+  // página em https não pode chamar API em http: o navegador bloqueia (conteúdo misto)
+  const bloqueadoPeloNavegador = location.protocol === 'https:' && urlLimpa.startsWith('http://')
 
   return (
     <Dialogo
@@ -46,7 +31,7 @@ export function Configuracoes({ configuracao, aoSalvar, aoLimparHistorico, aoFec
             type="button"
             className="botao botao--primario"
             disabled={!podeSalvar}
-            onClick={() => aoSalvar({ fonte, mqtt: { ...mqtt, url: mqtt.url.trim(), prefixo } })}
+            onClick={() => aoSalvar({ fonte, api: { url: urlLimpa } })}
           >
             Salvar e conectar
           </button>
@@ -62,23 +47,39 @@ export function Configuracoes({ configuracao, aoSalvar, aoLimparHistorico, aoFec
           </span>
         </label>
         <label className="alternador">
-          <input type="radio" name="fonte" checked={fonte === 'mqtt'} onChange={() => setFonte('mqtt')} />
+          <input type="radio" name="fonte" checked={fonte === 'api'} onChange={() => setFonte('api')} />
           <span>
-            <strong>ESP32 real via MQTT</strong>: conecta no broker por WebSocket
+            <strong>ESP32 real pela API</strong>: o dashboard consulta a API Flask, que recebe os dados do ESP32
           </span>
         </label>
       </fieldset>
 
-      {fonte === 'mqtt' && (
+      {fonte === 'api' && (
         <div className="campos">
-          {campo('url', 'Endereço WebSocket do broker', { placeholder: 'wss://seu-cluster.hivemq.cloud:8884/mqtt' })}
-          {!urlValida && <p className="nota nota--falha">O endereço precisa começar com wss:// (ou ws:// em rede local).</p>}
-          {campo('usuario', 'Usuário (opcional em broker público)')}
-          {campo('senha', 'Senha', { type: 'password' })}
-          {campo('prefixo', 'Prefixo dos tópicos', { placeholder: 'watersave' })}
+          <label className="campo">
+            <span className="campo__rotulo">Endereço da API</span>
+            <input
+              className="campo__entrada"
+              value={url}
+              onChange={(evento) => setUrl(evento.target.value)}
+              placeholder={urlApiPadrao()}
+              inputMode="url"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+          {!urlValida && <p className="nota nota--falha">O endereço precisa começar com http:// ou https://.</p>}
+          {bloqueadoPeloNavegador && (
+            <p className="nota nota--falha">
+              Esta página foi aberta por https, então o navegador bloqueia a API em http. Abra o dashboard pelo{' '}
+              <code>npm run dev</code>, que usa http.
+            </p>
+          )}
           <p className="nota nota--suave">
-            Tópicos usados: <code>{t.estado}</code>, <code>{t.online}</code>, <code>{t.temperaturaAlvo}</code> e{' '}
-            <code>{t.comando}</code>. Usuário e senha ficam salvos só neste navegador.
+            É o endereço do computador que roda <code>python app.py</code>, na porta 5000. Se o dashboard foi aberto
+            pelo <code>npm run dev</code> desse mesmo computador, o endereço padrão já aponta para ele, inclusive no
+            celular. O dashboard lê{' '}
+            <code>/api/leituras/ultima</code> a cada segundo e cadastra os comandos em <code>/api/comandos</code>.
           </p>
         </div>
       )}

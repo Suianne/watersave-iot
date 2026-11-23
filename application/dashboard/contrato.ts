@@ -37,19 +37,10 @@ export interface Telemetria {
   alerta: string
 }
 
-export function topicos(prefixo: string) {
-  return {
-    /** ESP32 → dashboard: JSON da Telemetria, a cada 2 s e sempre que algo importante mudar */
-    estado: `${prefixo}/estado`,
-    /** ESP32 → dashboard: "1" ou "0", retido; o Last Will do ESP32 publica "0" */
-    online: `${prefixo}/online`,
-    /** dashboard → ESP32: número em °C (ex.: "38.5"), retido */
-    temperaturaAlvo: `${prefixo}/temperaturaAlvo/set`,
-    /** dashboard → ESP32: código inteiro do Comando, NÃO retido */
-    comando: `${prefixo}/comando`,
-  }
-}
+/** Código 7 da API: só atualiza a temperatura-alvo. Não é um botão: vem do cartão da temperatura-alvo. */
+export const COMANDO_ATUALIZAR_ALVO = 7
 
+/** o ESP32 envia a telemetria para a API a cada 2 s */
 export const INTERVALO_PUBLICACAO_S = 2
 /** sem telemetria por mais que isso, os dados são considerados desatualizados */
 export const LIMITE_DADOS_ATUALIZADOS_S = 10

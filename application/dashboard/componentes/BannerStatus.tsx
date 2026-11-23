@@ -6,16 +6,23 @@ interface Props {
   dadosAtualizados: boolean
   /** antes da primeira telemetria não há o que avisar */
   jaRecebeuDados: boolean
+  /** motivo da falha de conexão com a API, quando houver */
+  falhaApi?: string
 }
 
-export function BannerStatus({ telemetria, dispositivoOnline, dadosAtualizados, jaRecebeuDados }: Props) {
+export function BannerStatus({ telemetria, dispositivoOnline, dadosAtualizados, jaRecebeuDados, falhaApi }: Props) {
   const alerta = telemetria?.alerta ? descreverAlerta(telemetria.alerta) : null
   const semConexao = jaRecebeuDados && (!dispositivoOnline || !dadosAtualizados)
 
-  if (!alerta && !semConexao) return null
+  if (!alerta && !semConexao && !falhaApi) return null
 
   return (
     <div className="banners">
+      {falhaApi && (
+        <div className="banner banner--aviso" role="status">
+          <strong>Sem conexão com a API.</strong> {falhaApi}
+        </div>
+      )}
       {alerta && (
         <div className={`banner banner--${alerta.nivel}`} role="alert">
           <strong>{alerta.titulo}.</strong> {alerta.mensagem}

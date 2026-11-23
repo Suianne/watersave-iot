@@ -40,9 +40,20 @@ export function ehLacuna(ponto: PontoHistorico): boolean {
  * lacuna para o gráfico mostrar o buraco em vez de ligar os pontos com uma reta.
  */
 export function adicionarPonto(historico: PontoHistorico[], ponto: PontoHistorico): PontoHistorico[] {
-  const ultimo = historico.at(-1)
-  const semDados = ultimo !== undefined && ponto.t - ultimo.t > LIMITE_DADOS_ATUALIZADOS_S * 1000
-  const novo = semDados ? [...historico, lacuna(ultimo.t + 1), ponto] : [...historico, ponto]
+  return adicionarPontos(historico, [ponto])
+}
+
+/** Acrescenta vários pontos em ordem cronológica, como o histórico carregado da API. */
+export function adicionarPontos(historico: PontoHistorico[], pontos: PontoHistorico[]): PontoHistorico[] {
+  const novo = [...historico]
+  for (const ponto of pontos) {
+    const ultimo = novo.at(-1)
+    // a API devolve de novo leituras que já estão no histórico salvo no navegador
+    if (ultimo !== undefined && ponto.t <= ultimo.t) continue
+    if (ultimo !== undefined && ponto.t - ultimo.t > LIMITE_DADOS_ATUALIZADOS_S * 1000) novo.push(lacuna(ultimo.t + 1))
+    novo.push(ponto)
+  }
+  if (novo.length === historico.length) return historico
   return novo.length > MAX_PONTOS ? novo.slice(novo.length - MAX_PONTOS) : novo
 }
 

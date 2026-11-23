@@ -110,6 +110,11 @@ function Painel({ configuracao, aoMudarConfiguracao }: PropsPainel) {
           dispositivoOnline={sistema.dispositivoOnline}
           dadosAtualizados={sistema.dadosAtualizados}
           jaRecebeuDados={sistema.ultimaAtualizacao !== null}
+          falhaApi={
+            sistema.conexao.status === 'desconectado' || sistema.conexao.status === 'erro'
+              ? sistema.conexao.detalhe
+              : undefined
+          }
         />
 
         <section className="indicadores" aria-label="Indicadores em tempo real">

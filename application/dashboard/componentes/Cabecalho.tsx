@@ -3,10 +3,10 @@ import { formatarTempoDecorrido } from '../formatar'
 import type { StatusConexao } from '../transporte/tipos'
 
 const TEXTO_CONEXAO: Record<StatusConexao, string> = {
-  conectando: 'conectando…',
-  conectado: 'conectado',
-  desconectado: 'desconectado',
-  erro: 'erro',
+  conectando: 'API: conectando…',
+  conectado: 'API online',
+  desconectado: 'API offline',
+  erro: 'API com erro',
 }
 
 const SELO_CONEXAO: Record<StatusConexao, string> = {
@@ -52,7 +52,7 @@ export function Cabecalho({
           <span className="selo selo--aviso">Simulação</span>
         ) : (
           <span className={`selo selo--${SELO_CONEXAO[conexao.status]}`} title={conexao.detalhe}>
-            Broker: {TEXTO_CONEXAO[conexao.status]}
+            {TEXTO_CONEXAO[conexao.status]}
           </span>
         )}
         <span className={`selo selo--${dispositivoOnline ? 'ok' : 'falha'}`}>

@@ -13,11 +13,11 @@
 
 ## Resultado esperado
 
-- Passo 1: aparece "aguardando o ESP32" e, em até 2 s, o indicador mostra 38,5 °C. O valor exibido vem da telemetria, não do campo.
+- Passo 1: aparece "aguardando o ESP32" e, em até 5 s (o ESP32 busca comandos na API a cada 2 s), o indicador mostra 38,5 °C. O valor exibido vem da telemetria, não do campo.
 - Passo 2: mensagem "Use um valor entre 20 e 70 °C." e nada é enviado.
-- Passo 3: o alvo continua 38,5 °C (tópico retido ou NVS).
+- Passo 3: o alvo continua 38,5 °C (o firmware guarda o alvo na NVS).
 - Passo 4: a válvula abre em 38,5 °C e fecha em 36,5 °C (alvo menos a histerese).
-- Se o ESP32 não confirmar em 6 s, aparece o evento "Sem confirmação do ESP32".
+- Se o ESP32 não buscar o comando em 10 s, a API o descarta e aparece o evento "Comando não entregue".
 
 **Automatizado:** `automatizados/intertravamentos.test.ts` (validação do valor) e `automatizados/interface.test.tsx` (campo e envio).
 

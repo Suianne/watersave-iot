@@ -18,6 +18,15 @@ Demonstrar que o protótipo mede temperatura e vazão, decide localmente quando 
    ~~~
 
 6. Grave firmware/WaterSave/WaterSave.ino na ESP32 e abra o Monitor Serial em 115200 baud.
+7. Inicie o dashboard e, em Fonte de dados, escolha ESP32 real pela API:
+
+   ~~~bash
+   cd application
+   npm install
+   npm run dev
+   ~~~
+
+   Para mostrar no celular, abra o endereço Network que o npm run dev mostra, com o celular na mesma rede.
 
 ## Roteiro
 
@@ -35,19 +44,25 @@ Demonstrar que o protótipo mede temperatura e vazão, decide localmente quando 
    ~~~
 
 7. Mostre no Monitor Serial o recebimento e a avaliação do comando.
+8. Mostre o mesmo pelo dashboard: indicadores, gráficos, troca da temperatura-alvo e modo manual com abrir e fechar a válvula. Os comandos de risco pedem confirmação.
 
 ## Endpoints úteis
 
 - GET http://localhost:5000/ — verificar API.
 - GET http://localhost:5000/api/leituras/ultima — última leitura.
-- GET http://localhost:5000/api/comandos — comandos pendentes.
+- GET http://localhost:5000/api/comandos — comandos pendentes (dentro da validade de 10 s).
 
 ## O que explicar ao professor
 
 - O controle e as proteções ficam no ESP32; a API não decide o acionamento.
+- Comandos expiram em 10 s: se o ESP32 cair, um comando antigo não é executado quando ele voltar.
 - A comunicação usa HTTP/REST e SQLite, sem broker MQTT.
-- A arquitetura tem quatro responsabilidades: percepção, controle, comunicação e armazenamento.
+- A arquitetura tem cinco responsabilidades: percepção, controle, comunicação, armazenamento e visualização (dashboard).
 - A saída física do relé está desabilitada nesta etapa. A demonstração comprova leitura, decisão lógica e comunicação, não o acionamento hidráulico real.
+
+## Plano B sem o ESP32
+
+Se o hardware falhar, rode `python application/testes/esp32_simulado.py` com a API aberta. Ele envia leituras e obedece aos comandos como o firmware, e o dashboard funciona igual.
 
 ## Limitação
 

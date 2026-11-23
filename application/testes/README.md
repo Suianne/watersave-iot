@@ -10,7 +10,7 @@ npm test
 
 | # | Teste do planejamento | Automatizado | Roteiro manual | Situação |
 |---|---|---|---|---|
-| 1 | Integrar o dashboard à plataforma IoT | — | [01](integracao/01-integrar-plataforma-iot.md) | Pendente (broker + ESP32) |
+| 1 | Integrar o dashboard à plataforma IoT | `transporte-http.test.ts` | [01](integracao/01-integrar-plataforma-iot.md) | Parcial (API + ESP32 simulado) |
 | 2 | Receber e apresentar dados reais | `contrato.test.ts` (formato dos dados) | [02](integracao/02-dados-reais.md) | Parcial |
 | 3 | Validar a atualização dos indicadores | `interface.test.tsx` | [03](integracao/03-atualizacao-indicadores.md) | Parcial |
 | 4 | Testar a configuração remota da temperatura-alvo | `intertravamentos.test.ts`, `interface.test.tsx` | [04](integracao/04-temperatura-alvo-remota.md) | Parcial |
@@ -20,8 +20,8 @@ npm test
 | 8 | Validar os comandos do usuário e seus intertravamentos | `intertravamentos.test.ts`, `interface.test.tsx` | [08](integracao/08-comandos-intertravamentos.md) | Parcial |
 | 9 | Testar a interface em diferentes dispositivos | — | [09](integracao/09-diferentes-dispositivos.md) | Pendente |
 
-**Parcial** = a lógica já está coberta por testes automatizados e validada no modo simulação; falta
-repetir o roteiro com o ESP32 real.
+**Parcial** = a lógica já está coberta por testes automatizados e validada no modo simulação ou com a API e
+o ESP32 simulado; falta repetir o roteiro com o ESP32 real.
 
 ## Arquivos automatizados
 
@@ -30,6 +30,19 @@ repetir o roteiro com o ESP32 real.
 - `simulador.test.ts`: comportamento esperado do firmware (histerese, proteções, reinício). Serve de referência para a camada de serviço.
 - `historico-eventos.test.ts`: lacunas nos gráficos quando o Wi-Fi cai e registro de ocorrências.
 - `interface.test.tsx`: indicadores, estados da válvula, campo da temperatura-alvo e painel de comandos.
+- `transporte-http.test.ts`: comunicação com a API REST (leituras, histórico, presença do ESP32, situação dos comandos e falhas de conexão), contra uma API falsa.
+
+Os testes da API em si (validade dos comandos, histórico) ficam em `tests/test_api.py`, na raiz, e rodam com `python -m pytest -q`.
+
+## ESP32 simulado
+
+`esp32_simulado.py` faz o papel do ESP32 junto da API de verdade: envia leituras a cada 2 s, busca os
+comandos e aplica as regras do contrato de dados. Com ele dá para executar os roteiros sem o hardware:
+
+```bash
+python application/testes/esp32_simulado.py            # API em http://127.0.0.1:5000
+python application/testes/esp32_simulado.py --api http://192.168.0.10:5000
+```
 
 ## Como registrar um teste manual
 

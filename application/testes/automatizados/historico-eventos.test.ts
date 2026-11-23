@@ -4,6 +4,7 @@ import { eventosDaTransicao } from '../../dashboard/eventos'
 import {
   MAX_PONTOS,
   adicionarPonto,
+  adicionarPontos,
   ehLacuna,
   filtrarJanela,
   pontoDaTelemetria,
@@ -38,6 +39,23 @@ describe('histórico dos gráficos', () => {
     historico = adicionarPonto(historico, pontoDaTelemetria(30_000, telemetria()))
     expect(historico).toHaveLength(4)
     expect(ehLacuna(historico[2])).toBe(true)
+  })
+
+  it('ignora leitura que não é mais nova que o último ponto (a API repete a última ao recarregar a página)', () => {
+    let historico: PontoHistorico[] = []
+    historico = adicionarPonto(historico, pontoDaTelemetria(2_000, telemetria()))
+    historico = adicionarPonto(historico, pontoDaTelemetria(1_000, telemetria()))
+    historico = adicionarPonto(historico, pontoDaTelemetria(2_000, telemetria()))
+    expect(historico.map((ponto) => ponto.t)).toEqual([2_000])
+  })
+
+  it('junta o histórico da API ao salvo no navegador, com lacuna onde o ESP32 ficou sem enviar', () => {
+    const salvo = [pontoDaTelemetria(0, telemetria())]
+    const daApi = [0, 2_000, 4_000, 60_000].map((t) => pontoDaTelemetria(t, telemetria()))
+    const historico = adicionarPontos(salvo, daApi)
+    expect(historico.map((ponto) => (ehLacuna(ponto) ? 'lacuna' : ponto.t))).toEqual([0, 2_000, 4_000, 'lacuna', 60_000])
+    // nada de novo: devolve o mesmo histórico, sem redesenhar os gráficos
+    expect(adicionarPontos(historico, [pontoDaTelemetria(60_000, telemetria())])).toBe(historico)
   })
 
   it('limita a quantidade de pontos guardados', () => {
