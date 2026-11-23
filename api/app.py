@@ -2,13 +2,20 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from database import (
+    VALIDADE_COMANDO_S,
     inicializar_banco,
     salvar_leitura,
     obter_ultima_leitura,
+    obter_leituras,
     obter_comandos,
+    obter_comando,
     salvar_comando,
     marcar_comando_processado,
 )
+
+# histórico pedido pelo dashboard: 6000 leituras são cerca de 3 h com uma leitura a cada 2 s
+LIMITE_PADRAO_LEITURAS = 1000
+LIMITE_MAXIMO_LEITURAS = 6000
 
 app = Flask(__name__)
 CORS(app)
@@ -63,6 +70,23 @@ def consultar_ultima_leitura():
         return jsonify({"erro": "Falha ao consultar leitura"}), 500
 
 
+@app.get("/api/leituras")
+def consultar_leituras():
+    desde = request.args.get("desde", type=int)
+    limite = request.args.get("limite", LIMITE_PADRAO_LEITURAS, type=int)
+    if desde is None or desde < 0:
+        return jsonify({"erro": "desde deve ser um timestamp Unix em segundos"}), 400
+    if not 1 <= limite <= LIMITE_MAXIMO_LEITURAS:
+        return jsonify({"erro": f"limite deve estar entre 1 e {LIMITE_MAXIMO_LEITURAS}"}), 400
+
+    try:
+        leituras = obter_leituras(desde, limite)
+        return jsonify({"quantidade": len(leituras), "leituras": leituras})
+    except Exception:
+        app.logger.exception("Erro ao consultar leituras")
+        return jsonify({"erro": "Falha ao consultar leituras"}), 500
+
+
 @app.get("/api/comandos")
 def consultar_comandos():
     try:
@@ -96,10 +120,26 @@ def cadastrar_comando():
 
     try:
         comando_id = salvar_comando(alvo, comando)
-        return jsonify({"mensagem": "Comando cadastrado", "id": comando_id}), 201
+        return jsonify({
+            "mensagem": "Comando cadastrado",
+            "id": comando_id,
+            "validadeSegundos": VALIDADE_COMANDO_S,
+        }), 201
     except Exception:
         app.logger.exception("Erro ao cadastrar comando")
         return jsonify({"erro": "Falha ao cadastrar comando"}), 500
+
+
+@app.get("/api/comandos/<int:comando_id>")
+def consultar_comando(comando_id):
+    try:
+        comando = obter_comando(comando_id)
+    except Exception:
+        app.logger.exception("Erro ao consultar comando")
+        return jsonify({"erro": "Falha ao consultar comando"}), 500
+    if comando is None:
+        return jsonify({"erro": "Comando inexistente"}), 404
+    return jsonify({"comando": comando})
 
 
 @app.post("/api/comandos/<int:comando_id>/confirmar")

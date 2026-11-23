@@ -102,3 +102,88 @@ def test_nao_confirma_comando_duas_vezes(client):
     comando_id = cadastro.get_json()["id"]
     assert client.post(f"/api/comandos/{comando_id}/confirmar").status_code == 200
     assert client.post(f"/api/comandos/{comando_id}/confirmar").status_code == 404
+
+
+def envelhecer(tabela, registro_id, segundos):
+    """Simula um registro criado ha `segundos` no relogio do banco."""
+    with database.conectar() as conexao:
+        conexao.execute(
+            f"UPDATE {tabela} SET data_hora = datetime('now', ?) WHERE id = ?",
+            (f"-{segundos} seconds", registro_id),
+        )
+
+
+def test_cadastro_informa_a_validade_do_comando(client):
+    cadastro = client.post("/api/comandos", json={"comando": 3}).get_json()
+    assert cadastro["validadeSegundos"] == database.VALIDADE_COMANDO_S
+
+
+def test_comando_nao_buscado_dentro_da_validade_expira(client):
+    comando_id = client.post("/api/comandos", json={"comando": 5}).get_json()["id"]
+    envelhecer("comandos", comando_id, database.VALIDADE_COMANDO_S + 1)
+
+    # o ESP32 nao recebe mais o comando, mas ele so aparece como expirado depois da folga
+    assert client.get("/api/comandos").get_json()["comandos"] == []
+    situacao = client.get(f"/api/comandos/{comando_id}").get_json()["comando"]["situacao"]
+    assert situacao == "pendente"
+
+    envelhecer("comandos", comando_id, database.VALIDADE_COMANDO_S + database.FOLGA_CONFIRMACAO_S + 1)
+    situacao = client.get(f"/api/comandos/{comando_id}").get_json()["comando"]["situacao"]
+    assert situacao == "expirado"
+
+
+def test_comando_expirado_nao_bloqueia_os_seguintes(client):
+    antigo = client.post("/api/comandos", json={"comando": 5}).get_json()["id"]
+    envelhecer("comandos", antigo, 3600)
+    novo = client.post("/api/comandos", json={"comando": 1}).get_json()["id"]
+
+    pendentes = client.get("/api/comandos").get_json()["comandos"]
+    assert [comando["id"] for comando in pendentes] == [novo]
+
+
+def test_comando_buscado_no_fim_do_prazo_ainda_pode_ser_confirmado(client):
+    comando_id = client.post("/api/comandos", json={"comando": 3}).get_json()["id"]
+    envelhecer("comandos", comando_id, database.VALIDADE_COMANDO_S + 2)
+
+    assert client.post(f"/api/comandos/{comando_id}/confirmar").status_code == 200
+    situacao = client.get(f"/api/comandos/{comando_id}").get_json()["comando"]["situacao"]
+    assert situacao == "avaliado"
+
+
+def test_consulta_a_situacao_de_um_comando(client):
+    comando_id = client.post(
+        "/api/comandos",
+        json={"comando": 7, "temperaturaAlvo": 38.5},
+    ).get_json()["id"]
+
+    comando = client.get(f"/api/comandos/{comando_id}").get_json()["comando"]
+    assert comando["situacao"] == "pendente"
+    assert comando["comando"] == 7
+    assert comando["temperaturaAlvo"] == 38.5
+    assert isinstance(comando["timestamp"], int)
+
+    client.post(f"/api/comandos/{comando_id}/confirmar")
+    assert client.get(f"/api/comandos/{comando_id}").get_json()["comando"]["situacao"] == "avaliado"
+    assert client.get("/api/comandos/999").status_code == 404
+
+
+def test_historico_de_leituras_em_ordem_cronologica(client):
+    for temperatura in (30.0, 31.0, 32.0):
+        client.post("/api/leituras", json=leitura_valida(temperaturaAtual=temperatura))
+    envelhecer("leituras", 1, 7200)
+    agora = client.get("/api/leituras/ultima").get_json()["leitura"]["timestamp"]
+
+    resposta = client.get(f"/api/leituras?desde={agora - 60}").get_json()
+    assert resposta["quantidade"] == 2
+    assert [leitura["temperaturaAtual"] for leitura in resposta["leituras"]] == [31.0, 32.0]
+    assert resposta["leituras"][0]["valvulaAberta"] is False
+    assert isinstance(resposta["leituras"][0]["timestamp"], int)
+
+    # com limite, ficam as leituras mais recentes
+    resposta = client.get("/api/leituras?desde=0&limite=2").get_json()
+    assert [leitura["temperaturaAtual"] for leitura in resposta["leituras"]] == [31.0, 32.0]
+
+
+@pytest.mark.parametrize("parametros", ["", "?desde=abc", "?desde=-1", "?desde=0&limite=0", "?desde=0&limite=6001"])
+def test_rejeita_consulta_de_historico_invalida(client, parametros):
+    assert client.get(f"/api/leituras{parametros}").status_code == 400

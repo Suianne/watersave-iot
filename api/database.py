@@ -5,6 +5,13 @@ from pathlib import Path
 # Banco armazenado na própria pasta da API
 DATABASE_PATH = Path(__file__).parent / "watersave.db"
 
+# Comando que o ESP32 não buscou nesse prazo é descartado. Assim um "abrir válvula" antigo
+# não é executado quando o ESP32 volta de uma queda de Wi-Fi.
+VALIDADE_COMANDO_S = 10
+# Folga para o ESP32 confirmar um comando buscado no fim do prazo. Só depois dela a
+# situação do comando passa de "pendente" para "expirado".
+FOLGA_CONFIRMACAO_S = 5
+
 
 def conectar():
     conexao = sqlite3.connect(DATABASE_PATH)
@@ -65,6 +72,12 @@ def salvar_leitura(dados):
 
 
 
+def converter_leitura(linha):
+    leitura = dict(linha)
+    leitura["valvulaAberta"] = bool(leitura["valvulaAberta"])
+    return leitura
+
+
 def obter_ultima_leitura():
     """Retorna a leitura mais recente e seu timestamp Unix para detectar dados antigos."""
     with conectar() as conexao:
@@ -79,20 +92,59 @@ def obter_ultima_leitura():
         if linha is None:
             return None
 
-        leitura = dict(linha)
-        leitura["valvulaAberta"] = bool(leitura["valvulaAberta"])
-        return leitura
+        return converter_leitura(linha)
+
+
+def obter_leituras(desde, limite):
+    """Leituras a partir do timestamp Unix `desde`, em ordem cronológica.
+    Se passarem do limite, ficam as mais recentes."""
+    with conectar() as conexao:
+        linhas = conexao.execute("""
+            SELECT * FROM (
+                SELECT *,
+                       CAST(strftime('%s', data_hora) AS INTEGER) AS timestamp
+                FROM leituras
+                WHERE data_hora >= datetime(?, 'unixepoch')
+                ORDER BY id DESC
+                LIMIT ?
+            )
+            ORDER BY id ASC
+        """, (desde, limite)).fetchall()
+
+        return [converter_leitura(linha) for linha in linhas]
+
 
 def obter_comandos():
+    """Comandos que o ESP32 ainda pode executar: não avaliados e dentro da validade."""
     with conectar() as conexao:
         linhas = conexao.execute("""
             SELECT id, temperaturaAlvo, comando
             FROM comandos
             WHERE processado = 0
+              AND data_hora >= datetime('now', ?)
             ORDER BY id ASC
-        """).fetchall()
+        """, (f"-{VALIDADE_COMANDO_S} seconds",)).fetchall()
 
         return [dict(linha) for linha in linhas]
+
+
+def obter_comando(comando_id):
+    """Comando com a situação: pendente, avaliado (o ESP32 confirmou) ou expirado
+    (descartado sem o ESP32 buscar)."""
+    with conectar() as conexao:
+        linha = conexao.execute("""
+            SELECT id, temperaturaAlvo, comando,
+                   CAST(strftime('%s', data_hora) AS INTEGER) AS timestamp,
+                   CASE
+                       WHEN processado = 1 THEN 'avaliado'
+                       WHEN data_hora < datetime('now', ?) THEN 'expirado'
+                       ELSE 'pendente'
+                   END AS situacao
+            FROM comandos
+            WHERE id = ?
+        """, (f"-{VALIDADE_COMANDO_S + FOLGA_CONFIRMACAO_S} seconds", comando_id)).fetchone()
+
+        return None if linha is None else dict(linha)
 
 
 def salvar_comando(temperatura_alvo, comando):
