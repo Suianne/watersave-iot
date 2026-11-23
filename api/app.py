@@ -104,7 +104,7 @@ def receber_leituras():
         }), 500
 
 
-# ESP32 consulta comandos pendentes
+# Dashboard consulta a ultima telemetria armazenada
 @app.route("/api/leituras/ultima", methods=["GET"])
 def consultar_ultima_leitura():
     try:
