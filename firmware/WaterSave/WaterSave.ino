@@ -1,4 +1,3 @@
-
 #include <Arduino.h>
 #include <math.h>
 
@@ -8,7 +7,10 @@
 #include "actuators/ValveController.h"
 
 #include "services/WaterSaveService.h"
+#include "services/HysteresisController.h"
 #include "services/NvsTargetStore.h"
+
+#include "network/NetworkManager.h"
 
 // Percepcao
 TemperatureSensor temperatureSensor(Pins::TEMPERATURE_SENSOR);
@@ -19,7 +21,49 @@ ValveController valveController(Pins::VALVE_RELAY);
 service::NvsTargetStore targetStore;
 service::WaterSaveService waterSaveService(&targetStore);
 
+// Comunicacao: a tarefa de rede nunca acessa o servico diretamente.
+network::NetworkManager networkManager;
+
 unsigned long lastTelemetryLogMs = 0;
+
+void processNetworkCommand() {
+    network::NetworkCommand command;
+
+    // A fila contem no maximo um comando pendente.
+    if (!networkManager.receiveCommand(command)) return;
+
+    bool accepted = false;
+
+    // Valida o alvo antes de executar qualquer parte do comando.
+    // Assim, um alvo invalido nao deixa um comando parcialmente aplicado.
+    const bool targetIsValid =
+        !command.hasTargetTemperature ||
+        service::HysteresisController::isValidTarget(
+            command.targetTemperature);
+
+    if (targetIsValid) {
+        accepted = waterSaveService.handleCommand(command.code);
+
+        // O alvo so e alterado se o comando principal for aceito.
+        if (accepted && command.hasTargetTemperature) {
+            accepted = waterSaveService.setTargetTemperature(
+                command.targetTemperature);
+        }
+    }
+
+    // A API atual registra apenas que o comando foi avaliado.
+    // Ela ainda nao armazena o resultado aceito/recusado.
+    network::CommandResult result;
+    result.id = command.id;
+    result.accepted = accepted;
+    networkManager.submitCommandResult(result);
+
+    Serial.print(F("[COMANDO] ID "));
+    Serial.print(command.id);
+    Serial.println(accepted
+        ? F(" avaliado e aceito pelo servico.")
+        : F(" avaliado e recusado pelo servico."));
+}
 
 void setup() {
     Serial.begin(115200);
@@ -37,6 +81,12 @@ void setup() {
 
     // Inicializa a maquina de estados.
     waterSaveService.begin(millis());
+
+    // A rede funciona em tarefa separada. Se falhar, o controle local
+    // continua operando normalmente.
+    if (!networkManager.begin()) {
+        Serial.println(F("[REDE] Inicializacao falhou; controle local mantido."));
+    }
 
     Serial.println(F("Inicializacao concluida."));
     Serial.println(F("Controle centralizado na camada de servico."));
@@ -67,19 +117,24 @@ void loop() {
     // O servico decide estados, histerese e seguranca.
     waterSaveService.update(inputs, millis());
 
+    // Comandos sao avaliados no loop principal, nunca na tarefa de rede.
+    processNetworkCommand();
+
     // O atuador apenas executa a decisao logica do servico.
     valveController.setOpen(
         waterSaveService.valveShouldBeOpen()
     );
+
+    // Publica uma copia da telemetria mais recente para a fila da rede.
+    // A tarefa de rede envia no intervalo configurado, sem bloquear o loop.
+    const service::Telemetry telemetry = waterSaveService.telemetry();
+    networkManager.publishTelemetry(telemetry);
 
     // Telemetria local para depuracao.
     const unsigned long now = millis();
 
     if (now - lastTelemetryLogMs >= 2000) {
         lastTelemetryLogMs = now;
-
-        const service::Telemetry telemetry =
-            waterSaveService.telemetry();
 
         Serial.print(F("Temperatura: "));
         if (telemetry.temperatureValid) {
