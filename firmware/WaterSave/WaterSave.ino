@@ -42,12 +42,20 @@ void processNetworkCommand() {
             command.targetTemperature);
 
     if (targetIsValid) {
-        accepted = waterSaveService.handleCommand(command.code);
+        if (command.code == 7) {
+            // Comando de protocolo: atualizar somente o alvo de temperatura.
+            // Nao representa um novo comando da maquina de estados.
+            accepted = command.hasTargetTemperature &&
+                waterSaveService.setTargetTemperature(
+                    command.targetTemperature);
+        } else {
+            accepted = waterSaveService.handleCommand(command.code);
 
-        // O alvo so e alterado se o comando principal for aceito.
-        if (accepted && command.hasTargetTemperature) {
-            accepted = waterSaveService.setTargetTemperature(
-                command.targetTemperature);
+            // O alvo opcional so e alterado se o comando principal for aceito.
+            if (accepted && command.hasTargetTemperature) {
+                accepted = waterSaveService.setTargetTemperature(
+                    command.targetTemperature);
+            }
         }
     }
 
