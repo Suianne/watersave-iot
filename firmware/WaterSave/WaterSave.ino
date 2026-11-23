@@ -1,14 +1,14 @@
 #include <Arduino.h>
 #include <math.h>
 
-#include "config/Config.h"
-#include "sensors/TemperatureSensor.h"
-#include "sensors/FlowSensor.h"
-#include "actuators/ValveController.h"
-#include "services/WaterSaveService.h"
-#include "services/HysteresisController.h"
-#include "services/NvsTargetStore.h"
-#include "network/NetworkManager.h"
+#include "src/config/Config.h"
+#include "src/sensors/TemperatureSensor.h"
+#include "src/sensors/FlowSensor.h"
+#include "src/actuators/ValveController.h"
+#include "src/services/WaterSaveService.h"
+#include "src/services/HysteresisController.h"
+#include "src/services/NvsTargetStore.h"
+#include "src/network/NetworkManager.h"
 
 TemperatureSensor temperatureSensor(Pins::TEMPERATURE_SENSOR);
 FlowSensor flowSensor(Pins::FLOW_SENSOR);
