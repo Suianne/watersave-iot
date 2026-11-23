@@ -1,91 +1,62 @@
-# Firmware — WaterSave IoT
+# Firmware WaterSave
 
-Firmware da camada de percepção e controle local do protótipo WaterSave.
+Sketch integrado para a placa ESP32-WROOM, desenvolvido na Arduino IDE.
 
-## Plataforma de referência
+## O que faz
 
-- Placa de desenvolvimento: ESP32-PICO-KIT V4.1.
-- Ambiente: Arduino IDE.
-- Placa temporária usada em testes anteriores: ESP32-S3.
+- Lê temperatura com o DS18B20.
+- Mede vazão com o YF-S201.
+- Executa controle automático com alvo padrão de 35 °C e histerese de 2 °C.
+- Aplica as proteções da camada de serviço.
+- Envia telemetria à API e consulta comandos por HTTP.
 
-## Estrutura
+## Camadas
 
-```text
-firmware/
-├── WaterSave/
-│   ├── WaterSave.ino
-│   └── src/
-│       ├── config/Config.h
-│       ├── sensors/
-│       │   ├── TemperatureSensor.h
-│       │   ├── TemperatureSensor.cpp
-│       │   ├── FlowSensor.h
-│       │   └── FlowSensor.cpp
-│       ├── actuators/
-│       │   ├── ValveController.h
-│       │   └── ValveController.cpp
-│       └── control/
-│           ├── ThermalControl.h
-│           └── ThermalControl.cpp
-└── testes/
-    └── perception/
-        ├── test_ds18b20/
-        ├── test_yfs201/
-        └── test_relay_valve/
-```
+~~~text
+Sensores -> WaterSaveService -> ValveController
+                  |
+                  +----------> NetworkManager -> API Flask
+~~~
 
-Os testes independentes ficam fora do sketch principal e podem ser abertos individualmente no Arduino IDE.
+- sensors: leitura dos sensores.
+- services: controle, estados, validação e segurança.
+- actuators: acionamento lógico do relé.
+- network: conexão Wi-Fi e chamadas HTTP.
 
-## Bibliotecas
+A comunicação é executada pelo próprio loop principal, sem filas ou tarefa FreeRTOS dedicada. Isso deixa o fluxo mais simples para acompanhar durante a demonstração. As requisições HTTP são síncronas e podem pausar brevemente o loop; esta versão é voltada ao protótipo didático, não a uma instalação de produção.
 
-Instalar pelo Library Manager do Arduino IDE:
+## Preparar a Arduino IDE
 
-- OneWire (Paul Stoffregen).
-- DallasTemperature (Miles Burton).
+Instale pelo Library Manager:
 
-As bibliotecas padrão do core ESP32 fornecem GPIO, interrupções e temporização.
+- OneWire
+- DallasTemperature
+- ArduinoJson 7.4.3
 
-## Parâmetros implementados
+Abra firmware/WaterSave/WaterSave.ino e selecione a placa ESP32-WROOM correspondente.
 
-| Parâmetro | Valor |
+## Configurar a rede
+
+Edite localmente src/network/NetworkConfig.h:
+
+- WIFI_SSID: nome da rede.
+- WIFI_PASSWORD: senha da rede.
+- API_BASE_URL: IP do computador que executa a API, por exemplo http://192.168.1.10:5000.
+
+Não publique credenciais reais no GitHub. O computador e o ESP32 precisam estar na mesma rede.
+
+## Pinos de referência
+
+| Componente | GPIO |
 |---|---:|
-| DS18B20 | 12 bits |
-| Intervalo de leitura da temperatura | 1000 ms |
-| Tempo de conversão considerado | 750 ms |
-| Temperatura-alvo | 25 °C |
-| Histerese | 2 °C |
-| Fechamento térmico | 23 °C |
-| YF-S201 — intervalo de vazão | 1000 ms |
-| YF-S201 — fator inicial | 7,5 Hz/(L/min) |
-| Ausência de pulsos na janela | 0 L/min |
-| GPIO DS18B20 | 4 (em validação) |
-| GPIO YF-S201 | 27 (em validação) |
-| GPIO relé | 26 (em validação) |
+| DS18B20 DATA | 4 |
+| YF-S201 SIGNAL | 27 |
+| Relé IN1 | 26 |
 
-A conversão do DS18B20 é não bloqueante para que a contagem de pulsos do YF-S201 continue durante a aquisição da temperatura.
+Confirme os GPIOs na placa utilizada e confira o diagrama de ligação antes de energizar o circuito.
 
-## Segurança: saída do relé
+## Segurança
 
-A saída física do relé está **desabilitada por padrão** em `src/config/Config.h`:
+A saída física do relé permanece desabilitada em src/config/Config.h (PHYSICAL_OUTPUT_ENABLED = false). Assim, os testes de software e a demonstração serial/API podem ocorrer sem acionar a válvula.
 
-`ValveConfig::PHYSICAL_OUTPUT_ENABLED = false`
-
-O módulo JQC3F-03VDC-C respondeu ao teste com alimentação de 3,3 V da ESP32-S3, mas a polaridade de IN1 e a corrente consumida ainda não foram confirmadas. Não habilitar a saída até validar esses dados na placa real.
-
-A válvula é de 12 V e normalmente fechada. A decisão atual do protótipo é não instalar diodo flyback externo; essa escolha mantém o risco de sobretensão indutiva na desenergização da bobina e deve ser reavaliada se houver instabilidade, interferência ou desgaste dos contatos.
-
-## Pendências antes da montagem integrada
-
-- Confirmar a revisão física da ESP32-PICO-KIT e validar os GPIOs 4, 27 e 26.
-- Confirmar o tipo de saída do YF-S201 e definir o condicionamento para garantir nível lógico máximo de 3,3 V.
-- Verificar se a saída de 5 V da placa suporta o sensor de vazão.
-- Confirmar corrente do módulo relé e compatibilidade de IN1 com 3,3 V.
-- Confirmar corrente nominal da válvula e capacidade da fonte de 12 V.
-- Confirmar polaridade ativa do relé antes de habilitar a saída física.
-- Reavaliar a proteção contra transientes da bobina durante os testes físicos.
-- Calibrar o fator do YF-S201 durante os testes físicos, com procedimento simples.
-- Validar a leitura do DS18B20 com os testes físicos.
-
-## Observação de escopo
-
-O firmware mede somente a vazão instantânea. O volume acumulado não faz parte desta implementação.
+Não habilite o relé antes de verificar tensão, corrente, polaridade, compatibilidade elétrica, proteção contra transientes e funcionamento hidráulico. O campo valvulaAberta da API representa a decisão lógica do serviço, não uma confirmação física.

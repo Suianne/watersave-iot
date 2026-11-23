@@ -1,16 +1,11 @@
-
 #ifndef WATERSAVE_NETWORK_MANAGER_H
 #define WATERSAVE_NETWORK_MANAGER_H
 
 #include <Arduino.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/queue.h>
-
 #include "../services/ServiceTypes.h"
 
 namespace network {
 
-// Comando recebido da API e encaminhado ao loop principal.
 struct NetworkCommand {
     int id;
     int code;
@@ -18,53 +13,24 @@ struct NetworkCommand {
     float targetTemperature;
 };
 
-// Resultado da avaliação do comando pelo serviço.
-struct CommandResult {
-    int id;
-    bool accepted;
-};
-
-// Responsável pela comunicação Wi-Fi e HTTP.
-// O serviço nunca será modificado diretamente pela tarefa de rede.
+// Cliente HTTP simples. Todas as chamadas são feitas pelo loop principal.
 class NetworkManager {
 public:
-    NetworkManager();
-
-    // Cria as filas e inicia a tarefa de comunicação.
     bool begin();
-
-    // Atualiza a telemetria que será enviada à API.
-    // A fila mantém somente a amostra mais recente.
-    void publishTelemetry(const service::Telemetry& telemetry);
-
-    // Obtém um comando pendente para o loop principal.
-    bool receiveCommand(NetworkCommand& command);
-
-    // Informa à rede que o serviço avaliou o comando.
-    void submitCommandResult(const CommandResult& result);
-
+    bool update(const service::Telemetry& telemetry, NetworkCommand& command);
+    bool confirmCommand(int commandId);
     bool isConnected() const;
 
 private:
-    static void taskEntry(void* parameter);
-    void run();
-
     void connectWiFi();
-    void sendTelemetry();
-    void fetchCommands();
-    bool confirmCommand(int commandId);
-    QueueHandle_t telemetryQueue_;
-    QueueHandle_t commandQueue_;
-    QueueHandle_t resultQueue_;
+    void sendTelemetry(const service::Telemetry& telemetry);
+    bool fetchCommand(NetworkCommand& command);
 
-    bool initialized_;
-    bool commandInFlight_;
-    int inFlightCommandId_;
-
-    unsigned long lastCommunicationMs_;
-    unsigned long lastReconnectMs_;
+    unsigned long lastTelemetryMs_ = 0;
+    unsigned long lastCommandPollMs_ = 0;
+    unsigned long lastReconnectMs_ = 0;
 };
 
 }  // namespace network
 
-#endif  // WATERSAVE_NETWORK_MANAGER_H
+#endif

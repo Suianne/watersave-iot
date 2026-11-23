@@ -1,43 +1,37 @@
-# Contrato de dados: ESP32 ⇄ API REST ⇄ dashboard
+# Contrato de dados WaterSave
 
-> **Protocolo adotado na integração:** HTTP/REST sobre a rede local. Este contrato substitui a proposta MQTT anterior. O controle térmico e as proteções continuam locais no ESP32; a API transporta telemetria e comandos, mas não executa o controle.
+A comunicação entre ESP32 e API usa HTTP/REST na rede local. O controle térmico permanece no ESP32.
 
-## Arquitetura
+## Fluxo
 
-```
-Sensores/atuadores ⇄ ESP32 (percepção + serviço)
-                           │ HTTP/REST
-                           ▼
-                     API Flask + SQLite
-                           ▲
-                           │ HTTP/REST
-                       Dashboard
-```
+~~~text
+DS18B20 + YF-S201
+        |
+        v
+ESP32: percepção + controle
+        | HTTP
+        v
+API Flask <-> SQLite
+~~~
 
-- O ESP32 envia telemetria a cada 2 s e consulta comandos pendentes.
-- A API persiste as leituras e mantém uma fila de comandos no SQLite.
-- O dashboard consulta a última leitura e cadastra comandos.
-- A perda de Wi-Fi/API não interrompe o controle local do ESP32.
-- A tarefa FreeRTOS de rede não acessa o serviço diretamente. O `loop()` principal recebe os comandos, valida-os pelo serviço e devolve o resultado à tarefa de rede.
+O ESP32 envia telemetria e consulta comandos a cada 2 segundos. A API armazena leituras e mantém comandos pendentes até o firmware confirmar que os avaliou.
 
 ## Endpoints
 
-| Método | Endpoint | Origem | Finalidade | Resposta esperada |
-|---|---|---|---|---|
-| `GET` | `/` | qualquer cliente | verificar se a API está online | `200` |
-| `POST` | `/api/leituras` | ESP32 | armazenar telemetria | `201` |
-| `GET` | `/api/leituras/ultima` | dashboard | obter leitura mais recente e timestamp Unix | `200` |
-| `POST` | `/api/comandos` | dashboard | cadastrar comando pendente | `201` |
-| `GET` | `/api/comandos` | ESP32 | consultar comandos pendentes, em ordem de ID | `200` |
-| `POST` | `/api/comandos/<id>/confirmar` | ESP32 | marcar comando como avaliado pelo serviço | `200` |
-
-A confirmação da API significa que o firmware **avaliou** o comando. A API atual não registra se o serviço aceitou ou recusou a ação; essa informação aparece no Serial do ESP32. O dashboard deve confirmar o efeito pela telemetria seguinte.
+| Método | Rota | Uso |
+|---|---|---|
+| GET | / | Verificar se a API está online |
+| POST | /api/leituras | Receber telemetria |
+| GET | /api/leituras/ultima | Consultar a leitura mais recente |
+| GET | /api/comandos | Consultar comandos pendentes |
+| POST | /api/comandos | Cadastrar comando |
+| POST | /api/comandos/<id>/confirmar | Marcar comando como avaliado |
 
 ## Telemetria
 
-Endpoint: `POST /api/leituras`
+POST /api/leituras
 
-```json
+~~~json
 {
   "temperaturaAtual": 34.75,
   "temperaturaAlvo": 35.0,
@@ -48,81 +42,57 @@ Endpoint: `POST /api/leituras`
   "estadoSistema": 1,
   "alerta": ""
 }
-```
+~~~
 
-| Campo | Tipo | Unidade | Descrição |
-|---|---|---|---|
-| `temperaturaAtual` | número | °C | leitura do DS18B20; `-127` representa leitura inválida/desconectada no payload HTTP |
-| `temperaturaAlvo` | número | °C | alvo atualmente configurado no serviço |
-| `histerese` | número | °C | largura da faixa de histerese |
-| `vazao` | número | L/min | vazão estimada pelo YF-S201 |
-| `volumeTransferido` | número | L | volume acumulado desde a inicialização |
-| `valvulaAberta` | booleano | — | estado lógico comandado pelo serviço; não confirma abertura física |
-| `estadoSistema` | inteiro | — | estado da máquina, de 0 a 4 |
-| `alerta` | texto | — | código do alerta; string vazia quando não há alerta |
-
-A API exige todos os oito campos. Valores numéricos não podem ser booleanos. O endpoint de última leitura retorna `{"leitura": ...}`; a leitura inclui `timestamp` Unix para o dashboard detectar dados antigos. Quando ainda não existe leitura, `leitura` é `null`.
-
-## Estados do sistema
-
-| Código | Estado | Significado |
+| Campo | Tipo | Unidade |
 |---|---|---|
-| 0 | `INICIANDO` | ESP32 inicializando e aguardando leitura válida |
-| 1 | `AGUARDANDO` | controle automático; válvula logicamente fechada |
-| 2 | `TRANSFERINDO` | controle automático; válvula logicamente aberta |
-| 3 | `MANUAL` | controle automático desativado; operação por comandos |
-| 4 | `FALHA` | proteção acionada; válvula logicamente fechada |
+| temperaturaAtual | número | °C; -127 representa leitura inválida |
+| temperaturaAlvo | número | °C |
+| histerese | número | °C |
+| vazao | número | L/min |
+| volumeTransferido | número | L |
+| valvulaAberta | booleano | Estado lógico decidido pelo serviço |
+| estadoSistema | inteiro de 0 a 4 | Código de estado |
+| alerta | texto | Código do alerta ou texto vazio |
+
+## Estados
+
+| Código | Estado |
+|---:|---|
+| 0 | INICIANDO |
+| 1 | AGUARDANDO |
+| 2 | TRANSFERINDO |
+| 3 | MANUAL |
+| 4 | FALHA |
 
 ## Comandos
 
-Endpoint: `POST /api/comandos`
+POST /api/comandos
 
-O corpo contém `comando` e, quando necessário, `temperaturaAlvo`. A API devolve um ID; o ESP32 consulta a fila e processa um comando por vez.
+| Código | Ação |
+|---:|---|
+| 1 | Parada de emergência |
+| 2 | Resetar falha |
+| 3 | Entrar no modo manual |
+| 4 | Voltar ao modo automático |
+| 5 | Abrir válvula no modo manual |
+| 6 | Fechar válvula no modo manual |
+| 7 | Atualizar somente a temperatura-alvo |
 
-| Código | Comando | Regra de aceitação no serviço |
-|---|---|---|
-| 1 | Parada de emergência | sempre; fecha a válvula lógica e entra em `FALHA` |
-| 2 | Resetar falha | somente em `FALHA` e com leitura de temperatura válida |
-| 3 | Modo manual | não pode estar em `INICIANDO` nem já estar em `MANUAL` |
-| 4 | Modo automático | somente em `MANUAL` e com leitura válida |
-| 5 | Abrir válvula | somente em `MANUAL` e se estiver fechada |
-| 6 | Fechar válvula | somente em `MANUAL` e se estiver aberta |
-| 7 | Atualizar somente o alvo | exige `temperaturaAlvo` entre 20 e 70 °C; não altera o modo |
+Exemplo:
 
-Exemplo para alterar o alvo:
-
-```json
+~~~json
 {"comando": 7, "temperaturaAlvo": 38.5}
-```
+~~~
 
-O comando 7 é uma extensão do protocolo HTTP para permitir ajuste independente do alvo. Ele não é um novo estado nem um comando da máquina de estados do serviço: o `loop()` chama diretamente `setTargetTemperature()`, que valida e persiste o valor.
+O alvo permitido é de 20 a 70 °C. O código 7 exige temperaturaAlvo.
 
-Para comandos 1 a 6, o campo `temperaturaAlvo` é opcional. Se vier junto, o firmware valida o alvo antes de executar o comando e só o aplica se o comando principal for aceito.
+## Regras principais
 
-## Alertas
-
-| Código | Significado |
-|---|---|
-| `SENSOR_TEMP_DESCONECTADO` | DS18B20 desconectado |
-| `LEITURA_TEMP_INVALIDA` | leitura fora da faixa válida |
-| `SEM_FLUXO_VALVULA_ABERTA` | válvula lógica aberta sem vazão suficiente |
-| `FLUXO_VALVULA_FECHADA` | vazão detectada com válvula lógica fechada |
-| `TEMPO_MAXIMO_EXCEDIDO` | tempo máximo de abertura excedido |
-| `PARADA_EMERGENCIA` | parada de emergência acionada |
-
-## Regras de controle e segurança
-
-- Alvo padrão: **35 °C**; histerese: **2 °C**.
-- Abre quando temperatura >= alvo; fecha quando temperatura <= alvo - histerese; entre os limites mantém o estado.
-- Faixa configurável do alvo: 20 a 70 °C.
-- O controle continua local mesmo sem Wi-Fi ou API.
-- HTTP usa timeout de 1500 ms; comunicação periódica de 2000 ms; a tarefa de rede é separada do `loop()`.
-- A válvula física permanece desabilitada no firmware até validar GPIO, polaridade, alimentação, corrente, proteção elétrica e operação hidráulica.
-- `valvulaAberta` representa apenas a decisão lógica do serviço. Não deve ser apresentada como confirmação de acionamento físico.
-- A bomba ainda não faz parte do contrato de comandos desta integração.
-
-## Limitações conhecidas
-
-- A API confirma que o comando foi avaliado, mas não persiste o resultado aceito/recusado.
-- Se o ESP32 reiniciar antes de confirmar um comando, ele pode ser entregue novamente. Não há deduplicação persistente no firmware.
-- O dashboard da branch original da camada de aplicação foi desenvolvido com transporte MQTT. Ele ainda precisa de um adaptador HTTP/REST antes de ser integrado a esta arquitetura.
+- Alvo padrão: 35 °C.
+- Histerese: 2 °C. Abre ao atingir o alvo e fecha ao atingir alvo menos histerese.
+- Controle e proteções são executados localmente no ESP32.
+- A comunicação HTTP é chamada pelo loop principal, com timeout de 700 ms.
+- valvulaAberta informa o estado lógico, não confirma movimento físico da válvula.
+- A saída física do relé permanece desabilitada até validação elétrica e hidráulica.
+- A confirmação significa que o serviço avaliou o comando; não significa necessariamente que o aceitou.
