@@ -162,6 +162,10 @@ def enviar_comando():
             return jsonify({
                 "erro": "temperaturaAlvo inválida"
             }), 400
+        if not 20 <= temperatura_alvo <= 70:
+            return jsonify({
+                "erro": "temperaturaAlvo deve estar entre 20 e 70 °C"
+            }), 400
 
     # Codigo 7 e reservado para atualizar somente a temperatura-alvo.
     if comando == 7 and temperatura_alvo is None:
