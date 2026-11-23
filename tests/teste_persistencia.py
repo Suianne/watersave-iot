@@ -55,6 +55,13 @@ def executar_testes():
 
         database.salvar_leitura(leitura)
 
+        ultima = database.obter_ultima_leitura()
+        assert ultima is not None
+        assert ultima["temperaturaAtual"] == 32.5
+        assert ultima["valvulaAberta"] is True
+        assert isinstance(ultima["timestamp"], int)
+        print("[APROVADO] Ultima leitura e timestamp consultados.")
+
         with sqlite3.connect(banco_teste) as conexao:
             total = conexao.execute(
                 "SELECT COUNT(*) FROM leituras"
