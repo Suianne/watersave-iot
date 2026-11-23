@@ -44,6 +44,19 @@ bool NetworkManager::begin() {
         commandQueue_ == nullptr ||
         resultQueue_ == nullptr) {
         Serial.println(F("[REDE] Erro ao criar filas."));
+
+        if (telemetryQueue_ != nullptr) {
+            vQueueDelete(telemetryQueue_);
+            telemetryQueue_ = nullptr;
+        }
+        if (commandQueue_ != nullptr) {
+            vQueueDelete(commandQueue_);
+            commandQueue_ = nullptr;
+        }
+        if (resultQueue_ != nullptr) {
+            vQueueDelete(resultQueue_);
+            resultQueue_ = nullptr;
+        }
         return false;
     }
 
@@ -64,6 +77,13 @@ bool NetworkManager::begin() {
     if (taskCreated != pdPASS) {
         initialized_ = false;
         Serial.println(F("[REDE] Erro ao criar tarefa."));
+
+        vQueueDelete(telemetryQueue_);
+        vQueueDelete(commandQueue_);
+        vQueueDelete(resultQueue_);
+        telemetryQueue_ = nullptr;
+        commandQueue_ = nullptr;
+        resultQueue_ = nullptr;
         return false;
     }
 
@@ -144,7 +164,7 @@ void NetworkManager::run() {
         // Tenta confirmar o comando avaliado pelo serviço.
         if (commandInFlight_ && resultReady &&
             now - lastConfirmAttemptMs >=
-                NetworkConfig::TASK_INTERVAL_MS) {
+                NetworkConfig::COMMAND_RETRY_INTERVAL_MS) {
 
             lastConfirmAttemptMs = now;
 
@@ -289,16 +309,19 @@ void NetworkManager::fetchCommands() {
     command.code = primeiro["comando"] | -1;
 
     command.hasTargetTemperature =
-        primeiro["temperaturaAlvo"].is<float>();
+        primeiro["temperaturaAlvo"].is<float>() ||
+        primeiro["temperaturaAlvo"].is<int>();
 
     command.targetTemperature =
         command.hasTargetTemperature
             ? primeiro["temperaturaAlvo"].as<float>()
             : 0.0f;
 
-    if (command.id < 0 || command.code < 1 ||
-        command.code > 6) {
-        Serial.println(F("[REDE] Comando recebido invalido."));
+    // O ID precisa ser valido para permitir a confirmacao na API.
+    // Codigos fora do contrato seguem ao servico, que os recusa e registra,
+    // evitando que um registro inconsistente fique pendente para sempre.
+    if (command.id < 0) {
+        Serial.println(F("[REDE] Comando sem ID valido; ignorado."));
         return;
     }
 
@@ -327,7 +350,9 @@ bool NetworkManager::confirmCommand(int commandId) {
 
     http.end();
 
-    return status == 200;
+    // 404 tambem encerra o fluxo: a API informa que o comando ja foi
+    // processado ou nao existe (por exemplo, repeticao apos reinicio).
+    return status == 200 || status == 404;
 }
 
 }  // namespace network
