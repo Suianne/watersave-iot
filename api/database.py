@@ -64,6 +64,25 @@ def salvar_leitura(dados):
         """, valores)
 
 
+
+def obter_ultima_leitura():
+    """Retorna a leitura mais recente e seu timestamp Unix para detectar dados antigos."""
+    with conectar() as conexao:
+        linha = conexao.execute("""
+            SELECT *,
+                   CAST(strftime('%s', data_hora) AS INTEGER) AS timestamp
+            FROM leituras
+            ORDER BY id DESC
+            LIMIT 1
+        """).fetchone()
+
+        if linha is None:
+            return None
+
+        leitura = dict(linha)
+        leitura["valvulaAberta"] = bool(leitura["valvulaAberta"])
+        return leitura
+
 def obter_comandos():
     with conectar() as conexao:
         linhas = conexao.execute("""
