@@ -63,6 +63,10 @@ bool NetworkManager::begin() {
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
 
+    // Faz a primeira tentativa imediatamente ao iniciar a tarefa.
+    lastReconnectMs_ =
+        millis() - NetworkConfig::RECONNECT_INTERVAL_MS;
+
     initialized_ = true;
 
     const BaseType_t taskCreated = xTaskCreate(
